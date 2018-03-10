@@ -12,16 +12,16 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Adrianna Chang & Britta Evans");
 MODULE_DESCRIPTION("Linux device to simulate first come first served elevator system");
 
-// Elevator constants
-const int numFloors = 6;
-const int elevatorCapacity = 8;
+// Elevator macros
+#define NUM_FLOORS 6
+#define ELEVATOR_CAPACITY 8
 
 /* Elevator data structures */
 typedef struct passengerNode {
   int id;
   int origin;
   int destination;
-  passengerNode* next;
+  struct passengerNode* next;
 } passengerNode;
 
 typedef struct floorQueue {
@@ -29,14 +29,14 @@ typedef struct floorQueue {
   passengerNode* endQueue;
 } floorQueue;
 
-floor shaftArray[numFloors];
+floorQueue shaftArray[NUM_FLOORS];
 
 typedef struct elevatorCar {
   floorQueue* current_floor;
   int passengerCount;
   // array of passengerNode pointers; each array element represents a queue of passengers for a given floor,
   //with the first passenger in the queue being the one with the lowest priority id
-  passengerNode* passengerArray[numFloors];
+  passengerNode* passengerArray[NUM_FLOORS];
 } elevatorCar;
 
 // data from userspace

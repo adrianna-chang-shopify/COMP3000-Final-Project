@@ -12,14 +12,15 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Adrianna Chang & Britta Evans");
 MODULE_DESCRIPTION("Linux device to simulate first come first served elevator system");
 
-// Elevator macros
+// Elevator macros / constants / etc
 #define NUM_FLOORS 6
 #define ELEVATOR_CAPACITY 8
+
+int static nextId = 1000;
 
 /* Elevator data structures */
 typedef struct passengerNode {
   int id;
-  int origin;
   int destination;
   struct passengerNode* next;
 } passengerNode;
@@ -142,10 +143,31 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
 * len = length of data
 * offset = offset in buffer
 */
+
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset) {
+  int origin, destination;
+  char number[2] = {0};
+  int bufferIndex = 0, numberIndex = 0;
+
   // append received message
   sprintf(message, "%s = %d bytes", buffer, (int)len);
   printk(KERN_INFO "first_come_first_served: received %d characters from the user\n", (int)len);
+  printk(KERN_INFO "message: %s\n", message);
+
+  while (buffer[bufferIndex] != 0) {
+    if (buffer[bufferIndex] == ',') {
+      numberIndex = 0;
+      sscanf(number, "%d", &origin);
+    } else { 
+      number[numberIndex] = buffer[bufferIndex]; //add to char array
+      numberIndex++;
+    }
+    bufferIndex++; 
+  }
+  sscanf(number, "%d", &destination);
+  printk(KERN_INFO "Passenger received! origin = %d\n", origin);
+  printk(KERN_INFO "Passenger received! destination = %d\n", destination);
+
   return len;
 }
 
@@ -159,3 +181,31 @@ static int dev_release(struct inode *inodep, struct file *filep) {
 
 module_init(first_come_first_served_init);
 module_exit(first_come_first_served_exit);
+
+void initializeShaftArray() {
+  printk(KERN_INFO "Initializing shaft array!\n");
+
+  for(int i=0; i<NUM_FLOORS; i++) {
+    passengerNode* startQueue = NULL;
+    passengerNode* endQueue = NULL;
+    floorQueue new_floor = { startQueue, endQueue };
+    shaftArray[i] = new_floor;
+  }
+}
+
+// *passengerNode addPassengertoQueue(int origin, int destination) {
+//   shaftArray[origin];
+
+
+// }
+
+//   void push(node_t * head, int val) {
+//     node_t * current = head;
+//     while (current->next != NULL) {
+//         current = current->next;
+//     }
+
+//     /* now we can add a new variable */
+//     current->next = malloc(sizeof(node_t));
+//     current->next->val = val;
+//     current->next->next = NULL;

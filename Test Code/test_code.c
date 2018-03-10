@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
       return errno;
   }
 
-  ret = write(fd, "12,12", BUFFER_LENGTH);
+  ret = write(fd, "0,4", BUFFER_LENGTH);
 
   if (ret < 0) {
     perror("write failed");

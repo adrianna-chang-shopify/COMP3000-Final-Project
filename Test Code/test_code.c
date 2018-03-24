@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
 
   printf("test started\n");
 
-  fd = open("/dev/first_come_first_served", O_RDWR);
+  fd = open("/dev/round_robin", O_RDWR);
 
   if (fd < 0) {
     perror("open failed");
@@ -31,4 +31,3 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
-

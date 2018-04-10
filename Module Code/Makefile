@@ -1,4 +1,4 @@
-obj-m += thread.o
+obj-m += round_robin.o fcfs.o sdf.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules

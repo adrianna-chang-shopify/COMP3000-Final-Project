@@ -9,17 +9,17 @@
 #include <linux/kthread.h>
 #include <linux/sched.h>
 
-#define  DEVICE_NAME "fcfs"
+#define  DEVICE_NAME "sdf"
 #define  CLASS_NAME  "myclass"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Adrianna Chang & Britta Evans");
-MODULE_DESCRIPTION("Linux device to simulate first come first serve elevator system");
+MODULE_DESCRIPTION("Linux device to simulate shortest distance first elevator system");
 
 static struct task_struct *elevator_thread;
 
 // Elevator macros
-#define NUM_FLOORS 6
+#define NUM_FLOORS 12
 #define ELEVATOR_CAPACITY 8
 
 /* Elevator data structures */
@@ -99,49 +99,49 @@ static struct file_operations fops = {
 
 /* Initialization function
  */
-static int __init fcfs_init(void) {
-  printk(KERN_INFO "fcfs: initializing\n");
+static int __init sdf_init(void) {
+  printk(KERN_INFO "sdf: initializing\n");
 
   // dynamically allocate a major number
   majorNumber = register_chrdev(0, DEVICE_NAME, &fops);
 
   if (majorNumber<0) {
-    printk(KERN_ALERT "fcfs: failed to allocate major number\n");
+    printk(KERN_ALERT "sdf: failed to allocate major number\n");
     return majorNumber;
   }
 
-  printk(KERN_INFO "fcfs: registered with major number %d\n", majorNumber);
+  printk(KERN_INFO "sdf: registered with major number %d\n", majorNumber);
 
   // register device class
   driverClass = class_create(THIS_MODULE, CLASS_NAME);
   if (IS_ERR(driverClass)) {
     unregister_chrdev(majorNumber, DEVICE_NAME);
-    printk(KERN_ALERT "fcfs: failed to register device class\n");
+    printk(KERN_ALERT "sdf: failed to register device class\n");
     return PTR_ERR(driverClass);
   }
 
-  printk(KERN_INFO "fcfs: device class registered\n");
+  printk(KERN_INFO "sdf: device class registered\n");
 
   // register device driver
   driverDevice = device_create(driverClass, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
   if (IS_ERR(driverDevice)) {
     // if error, cClean up
     class_destroy(driverClass); unregister_chrdev(majorNumber, DEVICE_NAME);
-    printk(KERN_ALERT "fcfs: failed to create device\n");
+    printk(KERN_ALERT "sdf: failed to create device\n");
     return PTR_ERR(driverDevice);
   }
 
   initializeShaftArray();
   initializeElevatorCar();
 
-  printk(KERN_INFO "fcfs: device class created\n");
+  printk(KERN_INFO "sdf: device class created\n");
 
   thread_init();
 
   return 0;
 }
 
-static void __exit fcfs_exit(void) {
+static void __exit sdf_exit(void) {
   thread_cleanup();
   // remove device
   device_destroy(driverClass, MKDEV(majorNumber, 0));
@@ -151,7 +151,7 @@ static void __exit fcfs_exit(void) {
   class_destroy(driverClass);
   // unregister major number
   unregister_chrdev(majorNumber, DEVICE_NAME);
-  printk(KERN_INFO "fcfs: closed\n");
+  printk(KERN_INFO "sdf: closed\n");
 }
 
 /* Called each time the device is opened.
@@ -160,7 +160,7 @@ static void __exit fcfs_exit(void) {
 */
 
 static int dev_open(struct inode *inodep, struct file *filep) {
-  printk(KERN_INFO "fcfs: opened\n");
+  printk(KERN_INFO "sdf: opened\n");
   return 0;
 }
 
@@ -188,7 +188,7 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 
   // append received message
   // sprintf(message, "%s = %d bytes", buffer, (int)len);
-  //printk(KERN_INFO "fcfs: received %d characters from the user\n", (int)len);
+  //printk(KERN_INFO "sdf: received %d characters from the user\n", (int)len);
   // printk(KERN_INFO "message: %s\n", message);
 
   while (buffer[bufferIndex] != 0) {
@@ -218,7 +218,7 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 * filep = pointer to a file
 */
 static int dev_release(struct inode *inodep, struct file *filep) {
-  printk(KERN_INFO "fcfs: released\n");
+  printk(KERN_INFO "sdf: released\n");
   return 0;
 }
 
@@ -387,6 +387,32 @@ int existsPassengerNode(){
   return 1;
 }
 
+int checkPriorityInElevator(int floor_num) {
+  if (floor_num < 0 || floor_num > NUM_FLOORS - 1) {
+    return 0;
+  }
+
+  if (elevatorCar.passengerArray[floor_num] == NULL) {
+    return 0;
+  }
+  else {
+    return elevatorCar.passengerArray[floor_num]->id;
+  }
+}
+
+int checkPriorityInShaft(int floor_num) {
+  if (floor_num < 0 || floor_num > NUM_FLOORS - 1) {
+    return 0;
+  }
+
+  if (shaftArray[floor_num].startQueue == NULL) {
+    return 0;
+  }
+  else {
+    return shaftArray[floor_num].startQueue->id;
+  }
+}
+
 int thread_fn(void * v) {
   /* Structures for calculating time */
   struct timeval tv;
@@ -396,9 +422,8 @@ int thread_fn(void * v) {
   int counter = 0; //Ensure we don't get stuck in loop if passengers aren't being created properly
   // First pickUp variables
   int dist_to_origin;
-  int i, floor_check;
-  int next_destination, floor_delta;
-  int highest_priority, current_passenger_priority;
+  int i, j;
+  int floor_up_priority, floor_down_priority;
 
   // Main loop to run elevator
   while (firstOrigin < 0 && counter < 600000){
@@ -416,7 +441,6 @@ int thread_fn(void * v) {
   sprintf(buffer, "%lu sec %lu usec\n", start_sec, start_usec);
   printk(KERN_INFO "%s", buffer);
 
-  // printk(KERN_INFO "FirstOrigin: %d", firstOrigin);
   dist_to_origin = firstOrigin - elevatorCar.current_floor->id;
 
   for(i=0; i<dist_to_origin; i++) {
@@ -439,98 +463,106 @@ int thread_fn(void * v) {
       pickUp();
     }
 
-    // Check priority of passengers in elevator and determine next destination for elevator to move to
-    floor_check = 0;
-    while(floor_check < 6) {
-      if (elevatorCar.passengerArray[floor_check] != NULL){
-        break;
-      }
-      floor_check++;
-    }
+    // Check if anyone in elevator
+    if (elevatorCar.passengerCount == 0) {
+      printk(KERN_INFO "QUEUE COUNT: %d", queueCount);
+      // Check for closest floor with passenger to move to
+      for(i=1; i<NUM_FLOORS; i++) {
+        floor_up_priority = checkPriorityInShaft((elevatorCar.current_floor->id) + i);
+        floor_down_priority = checkPriorityInShaft((elevatorCar.current_floor->id) - i);
 
-    if (floor_check < NUM_FLOORS) {
-      highest_priority = elevatorCar.passengerArray[floor_check]->id;
-      next_destination = floor_check;
+        printk(KERN_INFO "floor_up: %d", elevatorCar.current_floor->id + i);
+        printk(KERN_INFO "floor_down: %d", elevatorCar.current_floor->id - i);
+        printk(KERN_INFO "floor_up_priority: %d",floor_up_priority);
+        printk(KERN_INFO "floor_down_priority: %d", floor_down_priority);
 
-      // Determine the floor to move to (drop off) based on the passenger with the highest priority
-      for(i=floor_check+1; i<NUM_FLOORS; i++) {
-        if (elevatorCar.passengerArray[i] != NULL) {
-          current_passenger_priority = elevatorCar.passengerArray[i]->id;
-          if (current_passenger_priority < highest_priority) {
-            highest_priority = current_passenger_priority;
-            next_destination = i;
+        if (floor_up_priority != 0 && floor_down_priority == 0) {
+          for (j = 0; j<i; j++){
+            elevatorUp();
+            printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
           }
+          break;
         }
-
-      }
-
-      // Move to next destination
-      floor_delta = elevatorCar.current_floor->id - next_destination;
-      if ( floor_delta > 0) {
-        for (i=0; i<floor_delta; i++) {
-          elevatorDown();
-          printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
-
-        }
-      }
-      else {
-        floor_delta *= -1;
-        for (i=0; i<floor_delta; i++) {
-          elevatorUp();
-          printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
-
-        }
-      }
-
-      // Check for drop off
-      if (elevatorCar.passengerArray[elevatorCar.current_floor->id] != NULL) {
-        dropOff();
-      }
-    }
-    else {
-      // Check priority of first passenger on each floor
-      int floor_check = 0;
-
-      while(shaftArray[floor_check].startQueue == NULL && floor_check < NUM_FLOORS) {
-        floor_check++;
-      }
-      if (floor_check < NUM_FLOORS) {
-        highest_priority = shaftArray[floor_check].startQueue->id;
-        next_destination = floor_check;
-
-        // Determine the floor to move to pick up based on the passenger with the highest priority
-        for(i = floor_check+1; i<NUM_FLOORS; i++) {
-          if (shaftArray[i].startQueue != NULL) {
-            current_passenger_priority = shaftArray[i].startQueue->id;
-            if (current_passenger_priority < highest_priority) {
-              highest_priority = current_passenger_priority;
-              next_destination = i;
-            }
-          }
-        }
-
-        // Move to next destination
-        floor_delta = elevatorCar.current_floor->id - next_destination;
-        if (floor_delta > 0) {
-          for (i=0; i<floor_delta; i++) {
+        else if (floor_up_priority == 0 && floor_down_priority != 0) {
+          for (j = 0; j<i; j++){
             elevatorDown();
             printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
-
           }
+          break;
         }
-        else {
-          floor_delta *= -1;
-          for (i=0; i<floor_delta; i++) {
+        else if (floor_up_priority != 0 && floor_down_priority != 0) {
+          if (floor_up_priority < floor_down_priority) {
+            for (j = 0; j<i; j++){
+              elevatorUp();
+              printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
+            }
+          }
+          else {
+            for (j = 0; j<i; j++){
+              elevatorDown();
+              printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
+            }
+          }
+          break;
+        }
+      }
+      if (shaftArray[elevatorCar.current_floor->id].startQueue != NULL) {
+        printk(KERN_INFO "PICKInG UP");
+        pickUp();
+      }
+      else {
+        printk(KERN_INFO "No one here!");
+      }
+    }
+
+    //Finding closest floor for drop off
+    for(i=1; i<NUM_FLOORS; i++) {
+      floor_up_priority = checkPriorityInElevator((elevatorCar.current_floor->id) + i);
+      floor_down_priority = checkPriorityInElevator((elevatorCar.current_floor->id) - i);
+
+      if (floor_up_priority != 0 && floor_down_priority == 0) {
+        for (j = 0; j<i; j++){
+          elevatorUp();
+          printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
+        }
+        break;
+      }
+      else if (floor_up_priority == 0 && floor_down_priority != 0) {
+        for (j = 0; j<i; j++){
+          elevatorDown();
+          printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
+        }
+        break;
+      }
+      else if (floor_up_priority != 0 && floor_down_priority != 0) {
+        if (floor_up_priority < floor_down_priority) {
+          for (j = 0; j<i; j++){
             elevatorUp();
             printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
           }
         }
+        else {
+          for (j = 0; j<i; j++){
+            elevatorDown();
+            printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
+          }
+        }
+        break;
       }
+    }
+
+    printk(KERN_INFO "Checking for drop off");
+    // Check for drop off
+    if (elevatorCar.passengerArray[elevatorCar.current_floor->id] != NULL) {
+      dropOff();
+    }
+    else {
+      printk(KERN_INFO "No one to drop off");
     }
   }
 
   //print results!
-  printk(KERN_INFO "---- FIRST COME FIRST SERVE ALGORITHM COMPLETE ----");
+  printk(KERN_INFO "---- SHORTEST DISTANCE FIRST ALGORITHM COMPLETE ----");
   printk(KERN_INFO "Start time: ");
   sprintf(buffer, "%lu sec %lu usec\n", start_sec, start_usec);
   printk(KERN_INFO "%s", buffer);
@@ -577,5 +609,5 @@ void thread_cleanup(void) {
   }
 }
 
-module_init(fcfs_init);
-module_exit(fcfs_exit);
+module_init(sdf_init);
+module_exit(sdf_exit);

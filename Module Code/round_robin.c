@@ -52,6 +52,8 @@ elevator elevatorCar;
 int queueCount = 0;
 int firstOrigin = -1; // To know when the first system call happens and the elevator needs to start moving
 
+void getCurrentTime(struct timeval, unsigned long*, unsigned long*);
+
 // elevator function prototypes
 void initializeShaftArray(void);
 void initializeElevatorCar(void);
@@ -69,7 +71,7 @@ int thread_init(void);
 void thread_cleanup(void);
 
 // data from userspace
-static char message[256] = {0};
+//static char message[256] = {0};
 
 //Automatically determined device number
 static int majorNumber;
@@ -185,9 +187,9 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
   int bufferIndex = 0, numberIndex = 0;
 
   // append received message
-  sprintf(message, "%s = %d bytes", buffer, (int)len);
-  printk(KERN_INFO "round_robin: received %d characters from the user\n", (int)len);
-  printk(KERN_INFO "message: %s\n", message);
+  // sprintf(message, "%s = %d bytes", buffer, (int)len);
+  //printk(KERN_INFO "round_robin: received %d characters from the user\n", (int)len);
+  // printk(KERN_INFO "message: %s\n", message);
 
   while (buffer[bufferIndex] != 0) {
     if (buffer[bufferIndex] == ',') {
@@ -202,6 +204,7 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
   sscanf(number, "%d", &destination);
 
   addPassengertoQueue(origin, destination);
+
   if (firstOrigin < 0) {
     firstOrigin = origin;
   }
@@ -217,6 +220,13 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 static int dev_release(struct inode *inodep, struct file *filep) {
   printk(KERN_INFO "round_robin: released\n");
   return 0;
+}
+
+void getCurrentTime(struct timeval tv, long unsigned *sec, long unsigned *usec) {
+  do_gettimeofday(&tv);
+
+  *sec = tv.tv_sec;
+  *usec = tv.tv_usec;
 }
 
 void initializeShaftArray() {
@@ -264,12 +274,12 @@ int addPassengertoQueue(int origin, int destination) {
 
   if (shaftArray[origin].startQueue == NULL) {
     shaftArray[origin].startQueue = new_passenger;
-    printk(KERN_INFO "origin: %d, startQueue id: %d", origin, shaftArray[origin].startQueue->id);
+    printk(KERN_INFO "Passenger id %d, floor %d -> floor %d", new_passenger->id, origin, destination);
   }
 
   else {
     shaftArray[origin].endQueue->next = new_passenger;
-    printk(KERN_INFO "origin: %d, endQueue id: %d", origin, shaftArray[origin].endQueue->id);
+    printk(KERN_INFO "Passenger id %d, floor %d -> floor %d", new_passenger->id, origin, destination);
   }
 
   shaftArray[origin].endQueue = new_passenger;
@@ -278,12 +288,13 @@ int addPassengertoQueue(int origin, int destination) {
 }
 
 int elevatorUp(){
-  int current_floor = elevatorCar.current_floor->id;
+  int current_floor;
+  current_floor = elevatorCar.current_floor->id;
   if ( current_floor == NUM_FLOORS - 1 ) {
     return -1;
   }
   else {
-    elevatorCar.current_floor = &shaftArray[current_floor++];
+    elevatorCar.current_floor = &shaftArray[++current_floor];
     msleep(1000);
   }
   return 0;
@@ -295,7 +306,7 @@ int elevatorDown(){
     return -1;
   }
   else {
-    elevatorCar.current_floor = &shaftArray[current_floor--];
+    elevatorCar.current_floor = &shaftArray[--current_floor];
     msleep(1000);
   }
   return 0;
@@ -305,17 +316,27 @@ void pickUp() {
   int i;
   int delta = ELEVATOR_CAPACITY - elevatorCar.passengerCount;
 
-  passengerNode* current_passenger = elevatorCar.current_floor->startQueue;
+  passengerNode* current_passenger, *next_passenger;
+  current_passenger = elevatorCar.current_floor->startQueue;
 
-  for (i=0; i<delta; i++) {
-    enterElevator(current_passenger);
-    elevatorCar.passengerCount++;
-    queueCount--;
-    current_passenger = current_passenger->next;
-    if (current_passenger == NULL) {
-      break;
+  if (delta > 0) {
+    for (i=0; i<delta; i++) {
+      next_passenger = current_passenger->next;
+      enterElevator(current_passenger);
+      elevatorCar.passengerCount++;
+      printk(KERN_INFO "Picking up passenger %d, passenger count = %d", current_passenger->id, elevatorCar.passengerCount);
+      queueCount--;
+
+      current_passenger = next_passenger;
+      if (current_passenger == NULL) {
+        break;
+      }
     }
   }
+  else {
+    printk("Elevator full!");
+  }
+
   msleep(1000);
 }
 
@@ -326,23 +347,24 @@ void dropOff() {
 
   while (head != NULL) {
     elevatorCar.passengerCount--;
+    printk(KERN_INFO "Dropping off passenger %d, passenger count = %d", head->id, elevatorCar.passengerCount);
     next_node = head->next;
     kfree(head);
     head = next_node;
   }
+  elevatorCar.passengerArray[current_floor] = NULL;
   msleep(1000);
 }
 
 void enterElevator(passengerNode* entering_passenger) {
   int dest = entering_passenger->destination;
+  elevatorCar.current_floor->startQueue = entering_passenger->next;
 
   if (elevatorCar.passengerArray[dest] == NULL) {
     elevatorCar.passengerArray[dest] = entering_passenger;
-    elevatorCar.current_floor->startQueue = entering_passenger->next;
     entering_passenger->next = NULL;
   }
   else {
-    elevatorCar.current_floor->startQueue = entering_passenger->next;
     if (elevatorCar.passengerArray[dest]->id > entering_passenger->id) {
       entering_passenger->next =  elevatorCar.passengerArray[dest];
       elevatorCar.passengerArray[dest] = entering_passenger;
@@ -350,6 +372,7 @@ void enterElevator(passengerNode* entering_passenger) {
     else {
       entering_passenger->next =  elevatorCar.passengerArray[dest]->next;
       elevatorCar.passengerArray[dest]->next = entering_passenger;
+
     }
   }
 
@@ -365,105 +388,106 @@ int existsPassengerNode(){
 }
 
 int thread_fn(void * v) {
+  /* Structures for calculating time */
+  struct timeval tv;
+  unsigned long start_sec, start_usec, end_sec, end_usec, total_sec, total_usec;
+  char buffer[256];
+
   int counter = 0; //Ensure we don't get stuck in loop if passengers aren't being created properly
   // First pickUp variables
-  int dist_to_origin = firstOrigin - elevatorCar.current_floor->id;
+  int dist_to_origin;
   int i;
-  int floor_to_check;
-  int pick_up;
-  int drop_off;
-
   int elevatorDirection = 1; // 1 = up, -1 = down
 
   // Main loop to run elevator
-  printk(KERN_INFO "In elevator-thread");
-  while (firstOrigin < 0 && counter < 10){
-    printk(KERN_INFO "Waiting for passengers!\n");
+  while (firstOrigin < 0 && counter < 600000){
     msleep(1000);
     counter++;
   }
 
-  printk(KERN_INFO "FirstOrigin: %d\n", firstOrigin);
-
-  // First pickUp
-  for(i=0; i<dist_to_origin; i++) {
-    elevatorUp();
+  if (firstOrigin < 0) {
+    return 0;
   }
-  pickUp();
 
-  while(existsPassengerNode() > 0) {
-    // Algorithm
-    printk(KERN_INFO "Current floor: %d\n", elevatorCar.current_floor->id);
-    if (elevatorCar.current_floor->id == 0) {
-      printk(KERN_INFO "Changing direction to UP\n");
-      elevatorDirection = 1;
-    }
-    else if (elevatorCar.current_floor->id == 6) {
-      printk(KERN_INFO "Changing direction to DOWN\n");
-      elevatorDirection = -1;
-    }
+  //Start time
+  printk(KERN_INFO "Start time: ");
+  getCurrentTime(tv, &start_sec, &start_usec);
+  sprintf(buffer, "%lu sec %lu usec\n", start_sec, start_usec);
+  printk(KERN_INFO "%s", buffer);
 
-    floor_to_check = elevatorCar.current_floor->id + elevatorDirection;
-    pick_up = shaftArray[floor_to_check].startQueue != NULL;
-    drop_off = elevatorCar.passengerArray[floor_to_check] != NULL;
+  // printk(KERN_INFO "FirstOrigin: %d", firstOrigin);
+  dist_to_origin = firstOrigin - elevatorCar.current_floor->id;
 
-    if ( drop_off || pick_up) {
-      printk(KERN_INFO "Passengers to pick up or drop off\n");
-      //Move
-      if (elevatorDirection == 1) {
-        elevatorUp();
-      }
-      else if (elevatorDirection == -1) {
-        elevatorDown();
-      }
-      //drop off / pick up
-      if (drop_off) {
-        printk(KERN_INFO "Dropping off!\n");
-        dropOff();
-      }
-      if (pick_up) {
-        printk(KERN_INFO "Picking off!\n");
-        pickUp();
-      }
-    }
-
-    else if (floor_to_check == 0) {
-      printk(KERN_INFO "Changing direction to UP\n");
-      elevatorDirection = 1;
-    }
-    else if (floor_to_check == 6) {
-      printk(KERN_INFO "Changing direction to DOWN\n");
-      elevatorDirection = -1;
+  for(i=0; i<dist_to_origin; i++) {
+    int current_floor;
+    current_floor = elevatorCar.current_floor->id;
+    if ( current_floor == NUM_FLOORS - 1 ) {
     }
     else {
-      if (elevatorDirection == 1) {
-        elevatorUp();
-      }
-      else if (elevatorDirection == -1) {
-        elevatorDown();
-      }
-    }
-
-    if (existsPassengerNode() == 0) {
-      printk(KERN_INFO "Sleeping while waiting for passengers\n");
+      elevatorCar.current_floor = &shaftArray[++current_floor];
       msleep(1000);
     }
   }
 
+  pickUp();
+
+  while(existsPassengerNode() > 0) {
+    // Algorithm
+    // Check for pick up
+    if (shaftArray[elevatorCar.current_floor->id].startQueue != NULL) {
+      pickUp();
+    }
+
+    // Check for direction changes
+    if (elevatorCar.current_floor->id == 0) {
+      elevatorDirection = 1;
+    }
+    else if (elevatorCar.current_floor->id == 5) {
+      elevatorDirection = -1;
+    }
+
+    // Move elevator
+    if (elevatorDirection == 1) {
+      elevatorUp();
+      printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
+    }
+    else if (elevatorDirection == -1) {
+      elevatorDown();
+      printk(KERN_INFO "------------------------------------------Floor: %d", elevatorCar.current_floor->id);
+    }
+
+
+    // Check for drop off
+    if (elevatorCar.passengerArray[elevatorCar.current_floor->id] != NULL) {
+      dropOff();
+    }
+  }
+
   //print results!
+  printk(KERN_INFO "---- ROUND ROBIN ALGORITHM COMPLETE ----");
+  printk(KERN_INFO "Start time: ");
+  sprintf(buffer, "%lu sec %lu usec\n", start_sec, start_usec);
+  printk(KERN_INFO "%s", buffer);
+  printk(KERN_INFO "End time: ");
+  getCurrentTime(tv, &end_sec, &end_usec);
+  sprintf(buffer, "%lu sec %lu usec\n", end_sec, end_usec);
+  printk(KERN_INFO "%s", buffer);
+
+  total_sec = end_sec - 1 - start_sec;
+  total_usec = end_usec + 1000000 - start_usec;
+  printk(KERN_INFO "Total sec: %lu, Total: usec: %lu", total_sec, total_usec);
+  printk(KERN_INFO "Done");
 
   return 0;
 }
 
 
-// From http://tuxthink.blogspot.ca/2011/02/kernel-thread-creation-1.html
+// From http://tuxthink.blogspot.ca/2014/06/teminating-kernel-thread-using.html
 // (thread_init, thread_cleanup code)
 int thread_init(void) {
     char our_thread[16]="elevator-thread";
-    void* data = NULL;
 
-    printk(KERN_INFO "in init");
-    elevator_thread = kthread_create(thread_fn, data, our_thread);
+    elevator_thread = kthread_create(thread_fn, NULL, our_thread);
     if((elevator_thread))
     {
       wake_up_process(elevator_thread);
@@ -474,9 +498,17 @@ int thread_init(void) {
 
 void thread_cleanup(void) {
   int ret;
-  ret = kthread_stop(elevator_thread);
-  if(!ret)
-    printk(KERN_INFO "Thread stopped");
+  printk(KERN_INFO "cleanup...");
+  printk(KERN_INFO "thread_state: %ld", elevator_thread->state);
+  if (elevator_thread->state == 64 || elevator_thread->state == 1) {
+    printk(KERN_INFO "Not stopping thread");
+  }
+  else {
+    ret = kthread_stop(elevator_thread);
+    printk("value of ret = %d", ret);
+    if(ret == 0)
+     printk(KERN_INFO "Thread stopped");
+  }
 }
 
 module_init(round_robin_init);

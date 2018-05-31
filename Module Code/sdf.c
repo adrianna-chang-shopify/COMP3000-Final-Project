@@ -19,8 +19,8 @@ MODULE_DESCRIPTION("Linux device to simulate shortest distance first elevator sy
 static struct task_struct *elevator_thread;
 
 // Elevator macros
-#define NUM_FLOORS 12
-#define ELEVATOR_CAPACITY 8
+#define NUM_FLOORS 6
+#define ELEVATOR_CAPACITY 16
 
 /* Elevator data structures */
 typedef struct passengerNode {
@@ -195,6 +195,7 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
     if (buffer[bufferIndex] == ',') {
       numberIndex = 0;
       sscanf(number, "%d", &origin);
+      memset(&number[0], 0, sizeof(number)); // Clear the number buffer
     } else {
       number[numberIndex] = buffer[bufferIndex]; //add to char array
       numberIndex++;
@@ -444,11 +445,8 @@ int thread_fn(void * v) {
   dist_to_origin = firstOrigin - elevatorCar.current_floor->id;
 
   for(i=0; i<dist_to_origin; i++) {
-    int current_floor;
-    current_floor = elevatorCar.current_floor->id;
-    if ( current_floor == NUM_FLOORS - 1 ) {
-    }
-    else {
+    int current_floor = elevatorCar.current_floor->id;
+    if ( current_floor < NUM_FLOORS - 1 ) {
       elevatorCar.current_floor = &shaftArray[++current_floor];
       msleep(1000);
     }
@@ -457,6 +455,9 @@ int thread_fn(void * v) {
   pickUp();
 
   while(existsPassengerNode() > 0) {
+    if(kthread_should_stop()) {
+      do_exit(0);
+    }
     // Algorithm
     // Check for pick up
     if (shaftArray[elevatorCar.current_floor->id].startQueue != NULL) {
@@ -465,16 +466,15 @@ int thread_fn(void * v) {
 
     // Check if anyone in elevator
     if (elevatorCar.passengerCount == 0) {
-      printk(KERN_INFO "QUEUE COUNT: %d", queueCount);
       // Check for closest floor with passenger to move to
       for(i=1; i<NUM_FLOORS; i++) {
         floor_up_priority = checkPriorityInShaft((elevatorCar.current_floor->id) + i);
         floor_down_priority = checkPriorityInShaft((elevatorCar.current_floor->id) - i);
 
-        printk(KERN_INFO "floor_up: %d", elevatorCar.current_floor->id + i);
-        printk(KERN_INFO "floor_down: %d", elevatorCar.current_floor->id - i);
-        printk(KERN_INFO "floor_up_priority: %d",floor_up_priority);
-        printk(KERN_INFO "floor_down_priority: %d", floor_down_priority);
+        // printk(KERN_INFO "floor_up_priority: %d", floor_up_priority);
+        // printk(KERN_INFO "floor_down_priority: %d", floor_down_priority);
+        // printk(KERN_INFO "floor up: %d", elevatorCar.current_floor->id + i);
+        // printk(KERN_INFO "floor down: %d", elevatorCar.current_floor->id - i);
 
         if (floor_up_priority != 0 && floor_down_priority == 0) {
           for (j = 0; j<i; j++){
@@ -506,13 +506,7 @@ int thread_fn(void * v) {
           break;
         }
       }
-      if (shaftArray[elevatorCar.current_floor->id].startQueue != NULL) {
-        printk(KERN_INFO "PICKInG UP");
-        pickUp();
-      }
-      else {
-        printk(KERN_INFO "No one here!");
-      }
+      pickUp();
     }
 
     //Finding closest floor for drop off
@@ -550,14 +544,9 @@ int thread_fn(void * v) {
         break;
       }
     }
-
-    printk(KERN_INFO "Checking for drop off");
     // Check for drop off
     if (elevatorCar.passengerArray[elevatorCar.current_floor->id] != NULL) {
       dropOff();
-    }
-    else {
-      printk(KERN_INFO "No one to drop off");
     }
   }
 
@@ -571,8 +560,15 @@ int thread_fn(void * v) {
   sprintf(buffer, "%lu sec %lu usec\n", end_sec, end_usec);
   printk(KERN_INFO "%s", buffer);
 
-  total_sec = end_sec - 1 - start_sec;
-  total_usec = end_usec + 1000000 - start_usec;
+  if (end_usec < start_usec) {
+    total_sec = end_sec - 1 - start_sec;
+    total_usec = end_usec + 1000000 - start_usec;
+  }
+  else {
+    total_sec = end_sec - start_sec;
+    total_usec = end_usec - start_usec;
+  }
+
   printk(KERN_INFO "Total sec: %lu, Total: usec: %lu", total_sec, total_usec);
   printk(KERN_INFO "Done");
 
@@ -598,7 +594,8 @@ void thread_cleanup(void) {
   int ret;
   printk(KERN_INFO "cleanup...");
   printk(KERN_INFO "thread_state: %ld", elevator_thread->state);
-  if (elevator_thread->state == 64 || elevator_thread->state == 1) {
+  if (elevator_thread->state!= 2)
+  {
     printk(KERN_INFO "Not stopping thread");
   }
   else {

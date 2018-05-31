@@ -9,6 +9,9 @@
 #include<time.h>
 
 #define BUFFER_LENGTH 256
+#define NUM_PASSENGERS 30
+#define NUM_FLOORS 6
+
 static char data[BUFFER_LENGTH];
 
 int main(int argc, char* argv[]) {
@@ -23,16 +26,17 @@ int main(int argc, char* argv[]) {
       return errno;
   }
 
+
   time_t t;
   srand((unsigned) time(&t));
   int start, dest;
 
-  for (i=0; i<30; i++) {
+  for (i=0; i<NUM_PASSENGERS; i++) {
     // 50% of passengers will have completely random starting and ending floors
     if ((rand() % 2) == 0) {
-      start = (rand() % 11) + 1;
+      start = (rand() % (NUM_FLOORS - 1)) + 1;
       do {
-        dest = (rand() % 11) + 1;
+        dest = (rand() % (NUM_FLOORS - 1)) + 1;
       } while (start == dest);
     }
     // 50% of passengers will either start from ground or have destination as ground
@@ -41,14 +45,14 @@ int main(int argc, char* argv[]) {
       if ((rand() % 2) == 0) {
         start = 0;
         do {
-          dest = rand() % 12;
+          dest = rand() % NUM_FLOORS;
         } while (start == dest);
       }
       // Half end on ground
       else {
         dest = 0;
         do {
-          start = rand() % 12;
+          start = rand() % NUM_FLOORS;
         } while (start == dest);
       }
     }
@@ -63,27 +67,67 @@ int main(int argc, char* argv[]) {
     sleep(2);
   }
 
-  // ret = write(fd, "3,4", BUFFER_LENGTH);
-  // if (ret < 0) {
-  //   perror("write failed");
-  //   return errno;
-  // }
-  // sleep(2);
-  // ret = write(fd, "0,1", BUFFER_LENGTH);
-  // if (ret < 0) {
-  //   perror("write failed");
-  //   return errno;
-  // }
-  //   sleep(2);
-  // ret = write(fd, "1,0", BUFFER_LENGTH);
-  //
-  // sleep(2);
-  // ret = write(fd, "2,0", BUFFER_LENGTH);
-  // if (ret < 0) {
-  //   perror("write failed");
-  //   return errno;
-  // }
-
-
+/*
+write(fd, "0,4", BUFFER_LENGTH);
+sleep(2);
+write(fd, "0,2", BUFFER_LENGTH);
+sleep(2);
+write(fd, "1,2", BUFFER_LENGTH);
+sleep(2);
+write(fd, "0,1", BUFFER_LENGTH);
+sleep(2);
+write(fd, "0,4", BUFFER_LENGTH);
+sleep(2);
+write(fd, "1,5", BUFFER_LENGTH);
+sleep(2);
+write(fd, "2,4", BUFFER_LENGTH);
+sleep(2);
+write(fd, "1,4", BUFFER_LENGTH);
+sleep(2);
+write(fd, "3,5", BUFFER_LENGTH);
+sleep(2);
+write(fd, "1,2", BUFFER_LENGTH);
+sleep(2);
+write(fd, "3,4", BUFFER_LENGTH);
+sleep(2);
+write(fd, "0,1", BUFFER_LENGTH);
+sleep(2);
+write(fd, "5,0", BUFFER_LENGTH);
+sleep(2);
+write(fd, "1,4", BUFFER_LENGTH);
+sleep(2);
+write(fd, "0,3", BUFFER_LENGTH);
+sleep(2);
+write(fd, "3,0", BUFFER_LENGTH);
+sleep(2);
+write(fd, "5,0", BUFFER_LENGTH);
+sleep(2);
+write(fd, "5,2", BUFFER_LENGTH);
+sleep(2);
+write(fd, "4,2", BUFFER_LENGTH);
+sleep(2);
+write(fd, "5,2", BUFFER_LENGTH);
+sleep(2);
+write(fd, "5,4", BUFFER_LENGTH);
+sleep(2);
+write(fd, "1,0", BUFFER_LENGTH);
+sleep(2);
+write(fd, "3,1", BUFFER_LENGTH);
+sleep(2);
+write(fd, "3,4", BUFFER_LENGTH);
+sleep(2);
+write(fd, "2,0", BUFFER_LENGTH);
+sleep(2);
+write(fd, "2,5", BUFFER_LENGTH);
+sleep(2);
+write(fd, "5,0", BUFFER_LENGTH);
+sleep(2);
+write(fd, "2,1", BUFFER_LENGTH);
+sleep(2);
+write(fd, "0,3", BUFFER_LENGTH);
+sleep(2);
+write(fd, "2,0", BUFFER_LENGTH);
+sleep(2);
+*/
   return 0;
 }

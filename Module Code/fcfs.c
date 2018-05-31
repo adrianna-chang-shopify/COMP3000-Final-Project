@@ -195,6 +195,7 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
     if (buffer[bufferIndex] == ',') {
       numberIndex = 0;
       sscanf(number, "%d", &origin);
+      memset(&number[0], 0, sizeof(number)); // Clear the number buffer
     } else {
       number[numberIndex] = buffer[bufferIndex]; //add to char array
       numberIndex++;
@@ -420,11 +421,8 @@ int thread_fn(void * v) {
   dist_to_origin = firstOrigin - elevatorCar.current_floor->id;
 
   for(i=0; i<dist_to_origin; i++) {
-    int current_floor;
-    current_floor = elevatorCar.current_floor->id;
-    if ( current_floor == NUM_FLOORS - 1 ) {
-    }
-    else {
+    int current_floor = elevatorCar.current_floor->id;
+    if ( current_floor < NUM_FLOORS - 1 ) {
       elevatorCar.current_floor = &shaftArray[++current_floor];
       msleep(1000);
     }
@@ -433,6 +431,10 @@ int thread_fn(void * v) {
   pickUp();
 
   while(existsPassengerNode() > 0) {
+    if(kthread_should_stop()) {
+      do_exit(0);
+    }
+
     // Algorithm
     // Check for pick up
     if (shaftArray[elevatorCar.current_floor->id].startQueue != NULL) {
@@ -441,7 +443,7 @@ int thread_fn(void * v) {
 
     // Check priority of passengers in elevator and determine next destination for elevator to move to
     floor_check = 0;
-    while(floor_check < 6) {
+    while(floor_check < NUM_FLOORS) {
       if (elevatorCar.passengerArray[floor_check] != NULL){
         break;
       }
@@ -539,8 +541,15 @@ int thread_fn(void * v) {
   sprintf(buffer, "%lu sec %lu usec\n", end_sec, end_usec);
   printk(KERN_INFO "%s", buffer);
 
-  total_sec = end_sec - 1 - start_sec;
-  total_usec = end_usec + 1000000 - start_usec;
+  if (end_usec < start_usec) {
+    total_sec = end_sec - 1 - start_sec;
+    total_usec = end_usec + 1000000 - start_usec;
+  }
+  else {
+    total_sec = end_sec - start_sec;
+    total_usec = end_usec - start_usec;
+  }
+
   printk(KERN_INFO "Total sec: %lu, Total: usec: %lu", total_sec, total_usec);
   printk(KERN_INFO "Done");
 
@@ -566,7 +575,8 @@ void thread_cleanup(void) {
   int ret;
   printk(KERN_INFO "cleanup...");
   printk(KERN_INFO "thread_state: %ld", elevator_thread->state);
-  if (elevator_thread->state == 64 || elevator_thread->state == 1) {
+  if (elevator_thread->state != 2)
+  {
     printk(KERN_INFO "Not stopping thread");
   }
   else {

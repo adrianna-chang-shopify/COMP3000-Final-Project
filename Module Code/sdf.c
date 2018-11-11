@@ -465,6 +465,7 @@ int thread_fn(void * v) {
     }
 
     // Check if anyone in elevator
+    // If no, then we need to check floors
     if (elevatorCar.passengerCount == 0) {
       // Check for closest floor with passenger to move to
       for(i=1; i<NUM_FLOORS; i++) {
@@ -476,6 +477,7 @@ int thread_fn(void * v) {
         // printk(KERN_INFO "floor up: %d", elevatorCar.current_floor->id + i);
         // printk(KERN_INFO "floor down: %d", elevatorCar.current_floor->id - i);
 
+         // If there is only a passenger to be picked up on a floor above elevatorCar's current pos
         if (floor_up_priority != 0 && floor_down_priority == 0) {
           for (j = 0; j<i; j++){
             elevatorUp();
@@ -483,6 +485,7 @@ int thread_fn(void * v) {
           }
           break;
         }
+        // If there is only a passenger to be picked up on a floor below elevatorCar's current pos
         else if (floor_up_priority == 0 && floor_down_priority != 0) {
           for (j = 0; j<i; j++){
             elevatorDown();
@@ -490,6 +493,8 @@ int thread_fn(void * v) {
           }
           break;
         }
+        // If we have passengers to be picked up on floors of equal distance from elevatorCar's current position,
+        // we need to compare ids to determine priority
         else if (floor_up_priority != 0 && floor_down_priority != 0) {
           if (floor_up_priority < floor_down_priority) {
             for (j = 0; j<i; j++){
@@ -510,6 +515,8 @@ int thread_fn(void * v) {
     }
 
     //Finding closest floor for drop off
+    // Same logic as above, but checking the elevatorCar rather than the floors
+    // In order to determine drop off
     for(i=1; i<NUM_FLOORS; i++) {
       floor_up_priority = checkPriorityInElevator((elevatorCar.current_floor->id) + i);
       floor_down_priority = checkPriorityInElevator((elevatorCar.current_floor->id) - i);

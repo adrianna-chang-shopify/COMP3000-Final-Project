@@ -430,7 +430,7 @@ int thread_fn(void * v) {
 
   pickUp();
 
-  while(existsPassengerNode() > 0) {
+  while (existsPassengerNode() > 0) {
     if(kthread_should_stop()) {
       do_exit(0);
     }
@@ -441,7 +441,8 @@ int thread_fn(void * v) {
       pickUp();
     }
 
-    // Check priority of passengers in elevator and determine next destination for elevator to move to
+    // Shortcut: Find first floor in elevatorCar that has at least one passenger in it 
+    // (to avoid checking floors we already know have no passengers)
     floor_check = 0;
     while(floor_check < NUM_FLOORS) {
       if (elevatorCar.passengerArray[floor_check] != NULL){
@@ -450,6 +451,7 @@ int thread_fn(void * v) {
       floor_check++;
     }
 
+     // Check priority of passengers in elevator and determine next destination for elevator to move to
     if (floor_check < NUM_FLOORS) {
       highest_priority = elevatorCar.passengerArray[floor_check]->id;
       next_destination = floor_check;
@@ -489,6 +491,8 @@ int thread_fn(void * v) {
         dropOff();
       }
     }
+    // Check priorities of passengers on floors (since the elevator is empty) in order to determine
+    // which floor to move to next
     else {
       // Check priority of first passenger on each floor
       int floor_check = 0;

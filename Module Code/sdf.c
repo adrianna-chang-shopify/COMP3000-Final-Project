@@ -591,6 +591,8 @@ int thread_init(void) {
     elevator_thread = kthread_create(thread_fn, NULL, our_thread);
     if((elevator_thread))
     {
+      // kthread_create needs to be returned by the task_struct passed to the wake_up_process function;
+      // this function will awaken the new kernel thread 
       wake_up_process(elevator_thread);
     }
 
